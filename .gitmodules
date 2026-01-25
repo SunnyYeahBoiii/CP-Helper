@@ -1,0 +1,6 @@
+[submodule "api-rag/OJ"]
+	path = api-rag/OJ
+	url = ./api-rag/OJ
+[submodule "api-rag/usaco-guide"]
+	path = api-rag/usaco-guide
+	url = ./api-rag/usaco-guide
