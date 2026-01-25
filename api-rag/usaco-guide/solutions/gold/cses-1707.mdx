@@ -1,0 +1,372 @@
+---
+id: cses-1707
+source: CSES
+title: Graph Girth
+author: Benjamin Qi, Andi Qu, David Zhou
+contributors: Chirag Jain
+---
+
+## Video Solution
+
+By David Zhou
+
+<YouTube id="plyLEdUq0WY" />
+
+<Spoiler title="Video Solution Code">
+
+<LanguageSection>
+<CPPSection>
+
+```cpp
+#include <climits>
+#include <iostream>
+#include <queue>
+#include <vector>
+using namespace std;
+
+int n;
+
+int bfs(int start, vector<vector<int>> &adj) {
+	vector<int> dist(n, -1);
+	dist[start] = 0;
+	vector<int> parent(n, -1);
+
+	queue<int> q;
+	q.push(start);
+	int min_cycle = INT_MAX;
+	while (!q.empty()) {
+		int curr = q.front();
+		q.pop();
+		for (int next : adj[curr]) {
+			if (dist[next] == -1) {
+				parent[next] = curr;
+				dist[next] = dist[curr] + 1;
+				q.push(next);
+			} else if (parent[curr] != next) {
+				// if the next cell is not the assigned parent, we have a cycle
+				min_cycle = min(min_cycle, dist[curr] + dist[next] + 1);
+			}
+		}
+	}
+
+	return min_cycle;
+}
+
+int main() {
+	int m;
+	cin >> n >> m;
+	vector<vector<int>> adj(n);
+	for (int i = 0; i < m; i++) {
+		int a, b;
+		cin >> a >> b;
+		adj[--a].push_back(--b);
+		adj[b].push_back(a);
+	}
+
+	int res = INT_MAX;
+	// suppose the current node is part of the shortest cycle
+	for (int i = 0; i < n; i++) { res = min(res, bfs(i, adj)); }
+
+	cout << (res == INT_MAX ? -1 : res) << endl;
+}
+```
+
+</CPPSection>
+<JavaSection>
+
+```java
+import java.io.*;
+import java.util.*;
+
+public class GraphGirth {
+	private static int n;
+	private static int[] dist;
+	private static int[] parent;
+	private static ArrayDeque<Integer> q = new ArrayDeque<>();
+
+	private static int bfs(int start, List<List<Integer>> adj, int currMin) {
+		Arrays.fill(dist, -1);
+		Arrays.fill(parent, -1);
+		q.clear();
+
+		dist[start] = 0;
+		q.add(start);
+		int minCycle = currMin;
+
+		while (!q.isEmpty()) {
+			int curr = q.poll();
+			for (int next : adj.get(curr)) {
+				if (dist[next] == -1) {
+					parent[next] = curr;
+					dist[next] = dist[curr] + 1;
+					q.add(next);
+				} else if (parent[curr] != next) {
+					// if the next cell is not the assigned parent, we have a cycle
+					int cycleLen = dist[curr] + dist[next] + 1;
+					if (cycleLen < minCycle) { minCycle = cycleLen; }
+				}
+			}
+		}
+
+		return minCycle;
+	}
+
+	public static void main(String[] args) throws IOException {
+		BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+		StringTokenizer st = new StringTokenizer(br.readLine());
+		n = Integer.parseInt(st.nextToken());
+		int m = Integer.parseInt(st.nextToken());
+
+		List<List<Integer>> adj = new ArrayList<>();
+		for (int i = 0; i < n; i++) { adj.add(new ArrayList<>()); }
+
+		for (int i = 0; i < m; i++) {
+			st = new StringTokenizer(br.readLine());
+			int a = Integer.parseInt(st.nextToken()) - 1;
+			int b = Integer.parseInt(st.nextToken()) - 1;
+			adj.get(a).add(b);
+			adj.get(b).add(a);
+		}
+
+		dist = new int[n];
+		parent = new int[n];
+
+		int res = Integer.MAX_VALUE;
+		for (int i = 0; i < n; i++) {
+			// suppose the current node is part of the shortest cycle
+			if (adj.get(i).size() < 2) continue;  // no cycle possible
+			res = Math.min(res, bfs(i, adj, res));
+		}
+
+		System.out.println(res == Integer.MAX_VALUE ? -1 : res);
+	}
+}
+```
+
+</JavaSection>
+<PySection>
+
+<Warning>
+
+The below code will TLE on some test cases due to Python's constant factor.
+
+</Warning>
+
+```py
+import sys
+from collections import deque
+from typing import List
+
+n, m = map(int, input().split())
+adj = [[] for _ in range(n)]
+for _ in range(m):
+	a, b = map(int, input().split())
+	a -= 1
+	b -= 1
+	adj[a].append(b)
+	adj[b].append(a)
+
+
+def bfs(start: int, adj: List[List[int]]) -> int:
+	dist = [-1] * n
+	dist[start] = 0
+	parent = [-1] * n
+
+	q = deque()
+	q.append(start)
+	min_cycle = float("inf")
+	while q:
+		curr = q.popleft()
+		for next in adj[curr]:
+			if dist[next] == -1:
+				parent[next] = curr
+				dist[next] = dist[curr] + 1
+				q.append(next)
+			elif parent[curr] != next:
+				# if the next cell is not the assigned parent, we have a cycle
+				min_cycle = min(min_cycle, dist[curr] + dist[next] + 1)
+
+	return min_cycle
+
+
+res = float("inf")
+for i in range(n):  # suppose the current node is part of the shortest cycle
+	res = min(res, bfs(i, adj))
+
+print(-1 if res == float("inf") else res)
+```
+
+</PySection>
+</LanguageSection>
+
+</Spoiler>
+
+## Explanation
+
+Let's consider a simpler problem: given a graph, find the shortest cycle that
+passes through node 1.
+
+What does a cycle through node 1 look like? In any cycle through node 1, there
+exists two nodes $u$ and $v$ on that cycle such that there is a path from 1 to
+$u$ and 1 to $v$, and there is an edge between $u$ and $v$. The length of this
+cycle is $dist(1, u) + dist(1, v) + 1$.
+
+One might now try to use BFS to find $dist(1, i)$ for each $i$ in
+$\mathcal{O}(N + M)$ time and then check for each edge $(u, v)$ whether
+$dist(1, u) + dist(1, v) + 1$ is minimal.
+
+Of course, this means that we might count a "cycle" like
+$1 \rightarrow x \rightarrow u \rightarrow v \rightarrow x \rightarrow 1$.
+However, this doesn't matter for our original problem, since the shortest cycle
+will always be shorter than such a "cycle".
+
+There's one problem with this approach though: if the edge $(u, v)$ is on the
+path from node 1 to node $v$, then $1 \rightarrow u \rightarrow v \rightarrow 1$
+isn't a cycle! And this time, it does matter in our original problem!
+
+Fortunately, there's a relatively simple fix.
+
+Instead of first finding all $dist(1, i)$ and then checking for the minimum, do
+both at the same time during the BFS.
+
+Now to prevent "backtracking", we only consider $dist(1, u) + dist(1, v) + 1$ as
+a minimum if we're currently at node $u$ and $dist(1, u) \leq dist(1, v)$.
+
+This algorithm runs in $\mathcal{O}(N + M)$ time. Since $N$ and $M$ are so
+small, we can just apply this algorithm for all nodes instead of just node 1.
+
+The final complexity of this solution is thus $\mathcal{O}(N(N + M))$.
+
+## Implementation
+
+<LanguageSection>
+<CPPSection>
+
+```cpp
+#include <algorithm>
+#include <cstring>
+#include <iostream>
+#include <queue>
+#include <vector>
+
+using namespace std;
+
+const int maxn = 2510;
+const int inf = 1000000007;
+
+int n, m;
+vector<int> adj[maxn];
+
+int cycle_len(int start) {
+	int ans = inf;
+
+	vector<int> dist(n, -1);
+	queue<int> bfs;
+
+	dist[start] = 0;
+	bfs.push(start);
+
+	while (!bfs.empty()) {
+		int node = bfs.front();
+		bfs.pop();
+
+		for (int adj_node : adj[node]) {
+			if (dist[adj_node] == -1) {
+				dist[adj_node] = dist[node] + 1;
+				bfs.push(adj_node);
+			} else if (dist[adj_node] >= dist[node]) {
+				ans = min(ans, 1 + dist[adj_node] + dist[node]);
+			}
+		}
+	}
+
+	return ans;
+}
+
+int main() {
+	cin >> n >> m;
+	for (int i = 0; i < m; i++) {
+		int a, b;
+		cin >> a >> b;
+		a--;
+		b--;
+		adj[a].push_back(b);
+		adj[b].push_back(a);
+	}
+
+	int res = inf;
+	for (int i = 0; i < n; i++) { res = min(res, cycle_len(i)); }
+
+	if (res == inf) {
+		cout << -1 << endl;
+		return 0;
+	}
+
+	cout << res << endl;
+}
+```
+
+</CPPSection>
+</LanguageSection>
+
+<Optional title="A Faster +1-Approximation">
+
+Can we improve the time complexity of the solution above when $M\gg N$?
+The solution code below reduces the time complexity to $\mathcal{O}(N^2)$
+by breaking whenever the BFS visits the same vertex twice. However, it is
+possible that it returns the length of the shortest cycle plus one instead
+of the length of the shortest cycle exactly, so it does not pass all the
+tests on CSES.
+
+
+```cpp
+#include <bits/stdc++.h>
+
+using namespace std;
+
+int main() {
+	ios::sync_with_stdio(false);
+	cin.tie(nullptr);
+
+	int n, m;
+	cin >> n >> m;
+
+	vector<vector<int>> adj(n);
+	for (int i = 0; i < m; ++i) {
+		int a, b;
+		cin >> a >> b;
+		--a, --b;
+		adj[a].push_back(b);
+		adj[b].push_back(a);
+	}
+
+	int answer = INT_MAX;
+
+	for (int i = 0; i < n; ++i) {  // bfs from i
+		vector<int> dist(n, -1);
+		queue<int> q;
+		q.push(i);
+		dist[i] = 0;
+
+		while (!q.empty()) {
+			int x = q.front();
+			q.pop();
+
+			for (int t : adj[x]) {
+				if (dist[t] == -1) {
+					dist[t] = dist[x] + 1;
+					q.push(t);
+				} else if (dist[t] >= dist[x]) {
+					answer = min(answer, dist[t] + dist[x] + 1);
+					goto DONE;
+				}
+			}
+		}
+	DONE:;
+	}
+
+	cout << (answer == INT_MAX ? -1 : answer) << '\n';
+}
+```
+
+</Optional>

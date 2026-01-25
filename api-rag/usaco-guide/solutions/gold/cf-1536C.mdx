@@ -1,0 +1,171 @@
+---
+id: cf-1536C
+source: CF
+title: Diluc and Kaeya
+author: Kevin Sheng, Ruben Jing
+---
+
+[Official Editorial (C++, Java)](https://codeforces.com/blog/entry/91520)
+
+## Explanation
+
+Lets consider a string with a non-reduced ratio $2D:2K$ and a substring with
+ratio $D:K$. If we take out the substring with ratio $D:K$, we are left
+with another substring with ratio $D:K$ ($2D-D:2K-K$), therefore making
+the original string able to be split. Thus, in order to "cut" a substring
+out of the original string, the reduced ratio of the substring must be the
+same as the reduced ratio of the original strng.
+
+Note that the substrings must start from index $0$. If we pull a substring
+out of the middle of the string, it is harder to compute the ratio of the
+elements before it.
+
+Keep track of the total number of 'D's and total number of 'K's. For each prefix,
+the ratio of $D:K$ in lowest terms is $\frac{D}{\gcd(D,K)}:\frac{K}{\gcd(D,K)}$.
+The solution to each prefix is how many times this reduced ratio has appeared so
+far plus one.  We add one because the amount of times this reduced ratio appeared
+is the amount of splits, and the amount of pieces resulting from the splits is the
+splits plus one.
+
+## Implementation
+
+**Time Complexity:** $\mathcal{O}(N)$
+
+<LanguageSection>
+<CPPSection>
+
+```cpp
+#include <algorithm>
+#include <iostream>
+#include <unordered_map>
+#include <vector>
+
+using std::cout;
+using std::endl;
+using std::vector;
+
+int main() {
+	int test_num;
+	std::cin >> test_num;
+	for (int t = 0; t < test_num; t++) {
+		int len;
+		std::cin >> len;
+		vector<char> str(len);
+		for (char &c : str) { std::cin >> c; }
+
+		int d_num = 0;
+		int k_num = 0;
+		vector<int> max_pref_chunks;
+		std::unordered_map<int, std::unordered_map<int, int>> prev_ratios;
+		for (char c : str) {
+			if (c == 'D') {
+				d_num++;
+			} else if (c == 'K') {
+				k_num++;
+			}
+			// get the simplified ratio by dividing both quantities by the gcd
+			int gcd = std::__gcd(d_num, k_num);
+			int d_ratio = d_num / gcd;
+			int k_ratio = k_num / gcd;
+			// add the ratio to the records and record the max prefix chunk
+			// amount
+			max_pref_chunks.push_back(++prev_ratios[d_ratio][k_ratio]);
+		}
+
+		for (int i = 0; i < len - 1; i++) { cout << max_pref_chunks[i] << ' '; }
+		cout << max_pref_chunks.back() << endl;
+	}
+}
+```
+
+</CPPSection>
+<JavaSection>
+
+```java
+import java.io.*;
+import java.util.*;
+
+public class DilucKaeya {
+	public static void main(String[] args) throws IOException {
+		BufferedReader read = new BufferedReader(new InputStreamReader(System.in));
+		int testNum = Integer.parseInt(read.readLine());
+
+		StringBuilder ans = new StringBuilder();
+		for (int t = 0; t < testNum; t++) {
+			read.readLine();
+			String str = read.readLine();
+
+			int dNum = 0;
+			int kNum = 0;
+			HashMap<Integer, HashMap<Integer, Integer>> prevRatios = new HashMap<>();
+			int[] maxPrefChunks = new int[str.length()];
+			for (int i = 0; i < str.length(); i++) {
+				if (str.charAt(i) == 'D') {
+					dNum++;
+				} else if (str.charAt(i) == 'K') {
+					kNum++;
+				}
+				// get the simplified ratio by dividing both quantities by the
+				// gcd
+				int gcd = gcd(dNum, kNum);
+				int dRatio = dNum / gcd;
+				int kRatio = kNum / gcd;
+
+				// add the ratio to the records and record the max prefix chunk
+				// amount
+				if (!prevRatios.containsKey(dRatio)) {
+					prevRatios.put(dRatio, new HashMap<>());
+				}
+				prevRatios.get(dRatio).put(
+				    kRatio, prevRatios.get(dRatio).getOrDefault(kRatio, 0) + 1);
+				maxPrefChunks[i] = prevRatios.get(dRatio).get(kRatio);
+			}
+
+			for (int i = 0; i < str.length() - 1; i++) {
+				ans.append(maxPrefChunks[i]).append(' ');
+			}
+			ans.append(maxPrefChunks[str.length() - 1]).append('\n');
+		}
+		System.out.print(ans);
+	}
+
+	private static int gcd(int a, int b) { return b == 0 ? a : gcd(b, a % b); }
+}
+```
+
+</JavaSection>
+<PySection>
+
+```py
+from math import gcd
+
+for _ in range(int(input())):
+	input()
+	k_num = 0
+	d_num = 0
+	max_pref_chunks = []
+	pref_ratios = {}
+	for c in input():
+		if c == "D":
+			d_num += 1
+		elif c == "K":
+			k_num += 1
+
+		# get the simplified ratio by dividing both quantities by the gcd
+		common = gcd(d_num, k_num)
+		d_ratio = d_num // common
+		k_ratio = k_num // common
+
+		# add the ratio to the records and record the max prefix chunk amount
+		if d_ratio not in pref_ratios:
+			pref_ratios[d_ratio] = {}
+		if k_ratio not in pref_ratios[d_ratio]:
+			pref_ratios[d_ratio][k_ratio] = 0
+		pref_ratios[d_ratio][k_ratio] += 1
+		max_pref_chunks.append(pref_ratios[d_ratio][k_ratio])
+
+	print(" ".join(str(m) for m in max_pref_chunks))
+```
+
+</PySection>
+</LanguageSection>

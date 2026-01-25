@@ -1,0 +1,280 @@
+---
+id: cses-1686
+source: CSES
+title: Coin Collector
+author: Dong Liu
+---
+
+**Time Complexity**: $\mathcal O(N+M)$
+
+First, we split the graph into SCCs. We then treat each component as a node. So
+then, If the coin collector enters a component, he can collect all the coins in
+it.
+
+Since the resulting graph is a DAG, we can use DP to find the maximum coins that
+can be collected.
+
+<LanguageSection>
+
+<CPPSection>
+
+```cpp
+#include <bits/stdc++.h>
+using namespace std;
+
+using ll = long long;
+using vi = vector<int>;
+#define pb push_back
+#define all(x) begin(x), end(x)
+#define rsz resize
+
+#define F0R(i, a) for (int i = 0; i < (a); i++)
+#define FOR(i, a, b) for (int i = (a); i <= (b); i++)
+#define R0F(i, a) for (int i = (a) - 1; i >= 0; i--)
+#define ROF(i, a, b) for (int i = (b); i >= a; i--)
+#define trav(a, x) for (auto &a : x)
+
+/* SCC from BenQ */
+struct SCC {
+	int N;
+	vector<vi> adj, radj;
+	vi todo, comps, comp;
+	vector<bool> vis;
+	void init(int _N) {
+		N = _N;
+		adj.rsz(N), radj.rsz(N), comp = vi(N, -1), vis.rsz(N);
+	}
+	void ae(int x, int y) { adj[x].pb(y), radj[y].pb(x); }
+	void dfs(int x) {
+		vis[x] = 1;
+		trav(y, adj[x]) if (!vis[y]) dfs(y);
+		todo.pb(x);
+	}
+	void dfs2(int x, int v) {
+		comp[x] = v;
+		trav(y, radj[x]) if (comp[y] == -1) dfs2(y, v);
+	}
+	void gen(int _N) {  // fills allComp
+		FOR(i, 1, _N) if (!vis[i]) dfs(i);
+		reverse(all(todo));
+		trav(x, todo) if (comp[x] == -1) {
+			dfs2(x, x);
+			comps.pb(x);
+		}
+	}
+};
+
+const int maxn = 1e5 + 5;
+
+int n, m;
+SCC scc;          // scc
+int value[maxn];  // value of each room
+ll group[maxn];   // value in each SCC
+vi rgraph[maxn];  // reverse graph
+ll dp[maxn];
+
+// calculates dp[i]
+ll DP(int i) {
+	if (dp[i]) return dp[i];
+	// start at i
+	dp[i] = group[i];
+	// simulate traveling from another SCC to this SCC
+	trav(j, rgraph[i]) dp[i] = max(dp[i], DP(j) + group[i]);
+	return dp[i];
+}
+
+int main() {
+	ios_base::sync_with_stdio(0);
+	cin.tie(0);
+
+	cin >> n >> m;
+	scc.init(n + 1);
+	FOR(i, 1, n) cin >> value[i];
+	while (m--) {
+		int a, b;
+		cin >> a >> b;
+		scc.ae(a, b);
+	}
+
+	// generate SCC
+	scc.gen(n);
+	// set dp to 0
+	fill(dp + 1, dp + n + 1, 0);
+	// precompute group value for each SCC
+	FOR(i, 1, n) group[scc.comp[i]] += value[i];
+	// create reverse edges for SCC
+	FOR(i, 1, n) trav(j, scc.adj[i]) {
+		if (scc.comp[i] == scc.comp[j]) continue;
+		rgraph[scc.comp[j]].pb(scc.comp[i]);
+	}
+	// find dp value for each SCC
+	ll ans = 0;
+	trav(i, scc.comps) ans = max(ans, DP(i));
+
+	cout << ans << '\n';
+}
+```
+
+</CPPSection>
+
+<JavaSection>
+
+```java
+import java.io.*;
+import java.util.*;
+
+public class CoinCollector {
+	static ArrayList<Integer>[] graph, revGraph, dag;
+	static boolean[] visited;
+	static int[] comp;
+	static long[] coins, compCoins, dp;
+	static ArrayDeque<Integer> stack;
+
+	public static void main(String[] args) throws IOException {
+		FastScanner fs = new FastScanner(System.in);
+		PrintWriter out =
+		    new PrintWriter(new BufferedWriter(new OutputStreamWriter(System.out)));
+
+		int n = fs.nextInt();
+		int m = fs.nextInt();
+
+		coins = new long[n];
+		for (int i = 0; i < n; i++) coins[i] = fs.nextLong();
+
+		graph = new ArrayList[n];
+		revGraph = new ArrayList[n];
+		for (int i = 0; i < n; i++) {
+			graph[i] = new ArrayList<>();
+			revGraph[i] = new ArrayList<>();
+		}
+
+		for (int i = 0; i < m; i++) {
+			int a = fs.nextInt() - 1;
+			int b = fs.nextInt() - 1;
+			graph[a].add(b);
+			revGraph[b].add(a);
+		}
+
+		// Run Kosaraju
+		int compId = kosaraju(n);
+
+		// Compress SCC coins
+		compCoins = new long[compId];
+		for (int i = 0; i < n; i++) compCoins[comp[i]] += coins[i];
+
+		// Build DAG
+		dag = new ArrayList[compId];
+		for (int i = 0; i < compId; i++) dag[i] = new ArrayList<>();
+		for (int u = 0; u < n; u++) {
+			for (int v : graph[u]) {
+				if (comp[u] != comp[v]) dag[comp[u]].add(comp[v]);
+			}
+		}
+
+		// DP on DAG (longest path)
+		dp = new long[compId];
+		long ans = 0;
+
+		boolean[] seen = new boolean[compId];
+		ArrayDeque<Integer> topo = new ArrayDeque<>();
+		for (int i = 0; i < compId; i++) {
+			if (!seen[i]) topoSort(i, seen, topo);
+		}
+
+		while (!topo.isEmpty()) {
+			int u = topo.pollLast();
+			if (dp[u] == 0) dp[u] = compCoins[u];
+			ans = Math.max(ans, dp[u]);
+			for (int v : dag[u]) dp[v] = Math.max(dp[v], dp[u] + compCoins[v]);
+		}
+
+		out.println(ans);
+		out.flush();
+	}
+
+	// ---- Kosaraju’s Algorithm ----
+	static int kosaraju(int n) {
+		visited = new boolean[n];
+		stack = new ArrayDeque<>();
+
+		// First pass: fill order
+		for (int i = 0; i < n; i++) {
+			if (!visited[i]) dfs1(i);
+		}
+
+		// Second pass: assign components
+		comp = new int[n];
+		Arrays.fill(comp, -1);
+		int compId = 0;
+		while (!stack.isEmpty()) {
+			int node = stack.pollLast();
+			if (comp[node] == -1) {
+				dfs2(node, compId);
+				compId++;
+			}
+		}
+		return compId;
+	}
+
+	static void dfs1(int u) {
+		visited[u] = true;
+		for (int v : graph[u])
+			if (!visited[v]) dfs1(v);
+		stack.add(u);
+	}
+
+	static void dfs2(int u, int id) {
+		comp[u] = id;
+		for (int v : revGraph[u])
+			if (comp[v] == -1) dfs2(v, id);
+	}
+
+	static void topoSort(int u, boolean[] seen, ArrayDeque<Integer> topo) {
+		seen[u] = true;
+		for (int v : dag[u])
+			if (!seen[v]) topoSort(v, seen, topo);
+		topo.add(u);
+	}
+
+	// ---- FastScanner ----
+	static class FastScanner {
+		private final InputStream in;
+		private final byte[] buffer = new byte[1 << 16];
+		private int ptr = 0, len = 0;
+
+		FastScanner(InputStream in) { this.in = in; }
+
+		private int readByte() throws IOException {
+			if (ptr >= len) {
+				ptr = 0;
+				len = in.read(buffer);
+				if (len <= 0) return -1;
+			}
+			return buffer[ptr++];
+		}
+
+		long nextLong() throws IOException {
+			int c;
+			while ((c = readByte()) <= ' ')
+				if (c == -1) return -1;
+			boolean neg = false;
+			if (c == '-') {
+				neg = true;
+				c = readByte();
+			}
+			long val = 0;
+			while (c > ' ') {
+				val = val * 10 + (c - '0');
+				c = readByte();
+			}
+			return neg ? -val : val;
+		}
+
+		int nextInt() throws IOException { return (int)nextLong(); }
+	}
+}
+```
+
+</JavaSection>
+
+</LanguageSection>

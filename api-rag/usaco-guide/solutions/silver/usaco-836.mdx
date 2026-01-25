@@ -1,0 +1,426 @@
+---
+id: usaco-836
+source: USACO Silver 2018 US Open
+title: Multiplayer Moo
+author: Kevin Sheng, David Zhou
+---
+
+[Official Editorial (C++)](http://www.usaco.org/current/data/sol_multimoo_silver_open18.html)
+
+## Explanation 1:
+
+We first find the largest **one-cow** region through floodfills from every non-visited cell.
+
+The largest **two-cow** region *technically* takes an optimization to pass in time. We map every cell to its floodfilled component. We then build edges between all adjacent cells of different colors. Finally, instead of doing a floodfill from every differing pair of adjacent colors, we can use the edges between components and add up the sizes for entire regions at once. We fix the first component and iterate over all adjacent ones for this floodfill. The region sizes are determined from the **one-cow** floodfill from earlier.
+
+The solution uses an iterative approach to floodfill instead of a recursive approach.
+
+## Implementation
+
+**Time Complexity:** $\mathcal{O}(N^2\log(N))$
+
+<LanguageSection>
+<CPPSection>
+
+```cpp
+#include <fstream>
+#include <iostream>
+#include <map>
+#include <set>
+#include <vector>
+
+using std::cout;
+using std::endl;
+using std::pair;
+using std::vector;
+
+/** @return the 4 cardinal neighbors of a position */
+vector<pair<int, int>> neighbors(int r, int c) {
+	return {{r + 1, c}, {r - 1, c}, {r, c + 1}, {r, c - 1}};
+}
+
+int main() {
+	std::ifstream read("multimoo.in");
+
+	int side_len;
+	read >> side_len;
+	vector<vector<int>> grid(side_len, vector<int>(side_len));
+	for (int r = 0; r < side_len; r++) {
+		for (int c = 0; c < side_len; c++) { read >> grid[r][c]; }
+	}
+
+	// contains the region ids of each cell- those with the same id are
+	// connected
+	vector<vector<int>> regions(side_len, vector<int>(side_len));
+	// region_cells[r] contains the positions of the cells with region id r
+	vector<vector<pair<int, int>>> region_cells;
+
+	int one_biggest = 0;
+	vector<vector<bool>> visited(side_len, vector<bool>(side_len));
+	// floodfill the regions to see which cells are connected
+	for (int r = 0; r < side_len; r++) {
+		for (int c = 0; c < side_len; c++) {
+			if (visited[r][c]) { continue; }
+
+			int curr_region = region_cells.size();
+
+			vector<pair<int, int>> contained;
+
+			vector<pair<int, int>> frontier{{r, c}};
+			visited[r][c] = true;
+			// floodfill to find all cells connected to the current one
+			while (!frontier.empty()) {
+				pair<int, int> curr = frontier.back();
+				frontier.pop_back();
+
+				contained.push_back(curr);
+				regions[curr.first][curr.second] = curr_region;
+
+				for (const auto &[nr, nc] : neighbors(curr.first, curr.second)) {
+					if (0 <= nr && 0 <= nc && nr < side_len && nc < side_len &&
+					    !visited[nr][nc] && grid[nr][nc] == grid[r][c]) {
+						visited[nr][nc] = true;
+						frontier.push_back({nr, nc});
+					}
+				}
+			}
+			one_biggest = std::max(one_biggest, (int)contained.size());
+			region_cells.push_back(contained);
+		}
+	}
+
+	// get the regions that are adjacent to other regions
+	vector<std::set<int>> adj_regions(region_cells.size());
+	for (const vector<pair<int, int>> &reg : region_cells) {
+		for (const auto &[r, c] : reg) {
+			for (const auto &[nr, nc] : neighbors(r, c)) {
+				if (0 <= nr && 0 <= nc && nr < side_len && nc < side_len &&
+				    regions[nr][nc] != regions[r][c]) {
+					adj_regions[regions[r][c]].insert(regions[nr][nc]);
+				}
+			}
+		}
+	}
+
+	/** @return the cow id of a region */
+	auto region_id = [&](int r) {
+		return grid[region_cells[r][0].first][region_cells[r][0].second];
+	};
+	// record of pairs of regions' areas that've been processed already
+	std::map<pair<int, int>, std::set<int>> seen;
+	int two_biggest = one_biggest;
+	for (int r1 = 0; r1 < region_cells.size(); r1++) {
+		for (int r2 : adj_regions[r1]) {
+			pair<int, int> valid{region_id(r1), region_id(r2)};
+			if (valid.first > valid.second) { std::swap(valid.first, valid.second); }
+
+			// if this pair & region have been processed already, don't start
+			if (seen[valid].count(r1)) { continue; }
+
+			// floodfill across whole regions this time, not just cells
+			int two_size = 0;
+			vector<int> frontier{r1};
+			// regions we've currently visited
+			vector<bool> curr_vis(region_cells.size());
+			curr_vis[r1] = true;
+			while (!frontier.empty()) {
+				int curr = frontier.back();
+				frontier.pop_back();
+				two_size += region_cells[curr].size();
+				seen[valid].insert(curr);
+				for (int nr : adj_regions[curr]) {
+					int nid = region_id(nr);
+					if (!curr_vis[nr] && (valid.first == nid || valid.second == nid)) {
+						curr_vis[nr] = true;
+						frontier.push_back(nr);
+					}
+				}
+			}
+			two_biggest = std::max(two_biggest, two_size);
+		}
+	}
+
+	std::ofstream("multimoo.out") << one_biggest << '\n' << two_biggest << endl;
+}
+```
+
+</CPPSection>
+<JavaSection>
+
+```java
+import java.io.*;
+import java.util.*;
+
+public class Multimoo {
+	private int n, cnt, id = 1;
+	private Map<Integer, Integer> idToSize = new HashMap<>();
+	private Map<Integer, Integer> idToColor = new HashMap<>();
+	private Map<Integer, List<Integer>> componentAdj = new HashMap<>();
+	private int[][] grid, ids;
+	private int[] dirr = {1, 0, -1, 0};
+	private int[] dirc = {0, 1, 0, -1};
+
+	private void floodFill(int r, int c, int color) {
+		for (int i = 0; i < 4; i++) {
+			int nextR = r + dirr[i];
+			int nextC = c + dirc[i];
+			if (nextR >= 0 && nextR < n && nextC >= 0 && nextC < n &&
+			    ids[nextR][nextC] == 0 && grid[nextR][nextC] == color) {
+				ids[nextR][nextC] = id;
+				cnt++;
+				floodFill(nextR, nextC, color);
+			}
+		}
+	}
+
+	private int dfsTwoColor(int compId, int color1, int color2,
+	                        Map<Integer, Boolean> visited) {
+		if (visited.getOrDefault(compId, false) ||
+		    (idToColor.get(compId) != color1 && idToColor.get(compId) != color2)) {
+			return 0;
+		}
+		visited.put(compId, true);
+		int totalSize = idToSize.get(compId);
+
+		List<Integer> neighbors = componentAdj.getOrDefault(compId, new ArrayList<>());
+		for (int neighbor : neighbors) {
+			totalSize += dfsTwoColor(neighbor, color1, color2, visited);
+		}
+		return totalSize;
+	}
+
+	public void solve() throws IOException {
+		BufferedReader br = new BufferedReader(new FileReader("multimoo.in"));
+		PrintWriter pw = new PrintWriter(new FileWriter("multimoo.out"));
+
+		n = Integer.parseInt(br.readLine());
+		grid = new int[n][n];
+		ids = new int[n][n];
+
+		for (int i = 0; i < n; i++) {
+			String[] line = br.readLine().split(" ");
+			for (int j = 0; j < n; j++) { grid[i][j] = Integer.parseInt(line[j]); }
+		}
+
+		int res1 = 0;
+		// finding size of every region
+		for (int i = 0; i < n; i++) {
+			for (int j = 0; j < n; j++) {
+				if (ids[i][j] == 0) {
+					ids[i][j] = id;
+					cnt = 1;  // count the current cell
+					idToColor.put(id, grid[i][j]);
+					floodFill(i, j, grid[i][j]);
+					res1 = Math.max(res1, cnt);
+					idToSize.put(id, cnt);
+					id++;
+				}
+			}
+		}
+
+		// build component adjacency graph
+		for (int i = 0; i < n; i++) {
+			for (int j = 0; j < n; j++) {
+				// check right neighbor
+				if (j + 1 < n && ids[i][j] != ids[i][j + 1]) {
+					int id1 = ids[i][j], id2 = ids[i][j + 1];
+					componentAdj.computeIfAbsent(id1, k -> new ArrayList<>()).add(id2);
+					componentAdj.computeIfAbsent(id2, k -> new ArrayList<>()).add(id1);
+				}
+				// check bottom neighbor
+				if (i + 1 < n && ids[i][j] != ids[i + 1][j]) {
+					int id1 = ids[i][j], id2 = ids[i + 1][j];
+					componentAdj.computeIfAbsent(id1, k -> new ArrayList<>()).add(id2);
+					componentAdj.computeIfAbsent(id2, k -> new ArrayList<>()).add(id1);
+				}
+			}
+		}
+
+		// remove duplicates from adjacency lists
+		for (List<Integer> neighbors : componentAdj.values()) {
+			Collections.sort(neighbors);
+			neighbors = neighbors.stream().distinct().collect(
+			    java.util.stream.Collectors.toList());
+		}
+
+		int res2 = res1;
+		// compute two-color regions using component graph traversal
+		Set<String> processedPairs = new HashSet<>();
+
+		for (Map.Entry<Integer, List<Integer>> entry : componentAdj.entrySet()) {
+			int compId = entry.getKey();
+			List<Integer> neighbors = entry.getValue();
+
+			for (int neighborId : neighbors) {
+				int color1 = idToColor.get(compId);
+				int color2 = idToColor.get(neighborId);
+
+				// ensure consistent ordering to avoid duplicate work
+				if (color1 > color2) {
+					int temp = color1;
+					color1 = color2;
+					color2 = temp;
+				}
+
+				String colorPair = color1 + "," + color2;
+				if (processedPairs.contains(colorPair)) { continue; }
+				processedPairs.add(colorPair);
+
+				// traverse the two-color region starting from this component
+				Map<Integer, Boolean> visited = new HashMap<>();
+				int regionSize = dfsTwoColor(compId, color1, color2, visited);
+				res2 = Math.max(res2, regionSize);
+			}
+		}
+
+		pw.println(res1);
+		pw.println(res2);
+
+		br.close();
+		pw.close();
+	}
+
+	public static void main(String[] args) throws IOException {
+		new Multimoo().solve();
+	}
+}
+```
+
+</JavaSection>
+<PySection>
+
+```py
+from collections import defaultdict, deque
+
+
+def flood_fill(r, c, color, n, grid, ids, id_val, cnt):
+	dirr = [1, 0, -1, 0]
+	dirc = [0, 1, 0, -1]
+
+	queue = deque([(r, c)])
+
+	while queue:
+		curr_r, curr_c = queue.popleft()
+
+		for i in range(4):
+			next_r = curr_r + dirr[i]
+			next_c = curr_c + dirc[i]
+			if (
+				0 <= next_r < n
+				and 0 <= next_c < n
+				and ids[next_r][next_c] == 0
+				and grid[next_r][next_c] == color
+			):
+				ids[next_r][next_c] = id_val
+				cnt[0] += 1
+				queue.append((next_r, next_c))
+
+
+def dfs_two_color(start_comp, color1, color2, id_to_color, id_to_size, component_adj):
+	visited = set()
+	stack = [start_comp]
+	total_size = 0
+
+	while stack:
+		comp_id = stack.pop()
+
+		if comp_id in visited:
+			continue
+
+		comp_color = id_to_color[comp_id]
+		if comp_color != color1 and comp_color != color2:
+			continue
+
+		visited.add(comp_id)
+		total_size += id_to_size[comp_id]
+
+		for neighbor in component_adj[comp_id]:
+			if neighbor not in visited:
+				neighbor_color = id_to_color[neighbor]
+				if neighbor_color == color1 or neighbor_color == color2:
+					stack.append(neighbor)
+
+	return total_size
+
+
+with open("multimoo.in", "r") as f:
+	n = int(f.readline().strip())
+	grid = []
+	ids = [[0] * n for _ in range(n)]
+
+	for i in range(n):
+		row = list(map(int, f.readline().strip().split()))
+		grid.append(row)
+
+id_val = 1
+id_to_size = {}
+id_to_color = {}
+component_adj = defaultdict(list)
+
+res1 = 0
+# finding size of every region
+for i in range(n):
+	for j in range(n):
+		if ids[i][j] == 0:
+			ids[i][j] = id_val
+			cnt = [1]  # count the current cell (use list for reference)
+			id_to_color[id_val] = grid[i][j]
+			flood_fill(i, j, grid[i][j], n, grid, ids, id_val, cnt)
+			res1 = max(res1, cnt[0])
+			id_to_size[id_val] = cnt[0]
+			id_val += 1
+
+# build component adjacency graph efficiently
+edge_set = set()
+for i in range(n):
+	for j in range(n):
+		# check right neighbor
+		if j + 1 < n and ids[i][j] != ids[i][j + 1]:
+			id1, id2 = ids[i][j], ids[i][j + 1]
+			if id1 > id2:
+				id1, id2 = id2, id1
+			edge_set.add((id1, id2))
+
+		# check bottom neighbor
+		if i + 1 < n and ids[i][j] != ids[i + 1][j]:
+			id1, id2 = ids[i][j], ids[i + 1][j]
+			if id1 > id2:
+				id1, id2 = id2, id1
+			edge_set.add((id1, id2))
+
+# convert edge set to adjacency list
+for id1, id2 in edge_set:
+	component_adj[id1].append(id2)
+	component_adj[id2].append(id1)
+
+res2 = res1
+# compute two-color regions using component graph traversal
+processed_pairs = set()
+for comp_id, neighbors in component_adj.items():
+	for neighbor_id in neighbors:
+		color1 = id_to_color[comp_id]
+		color2 = id_to_color[neighbor_id]
+
+		# ensure consistent ordering to avoid duplicate work
+		if color1 > color2:
+			color1, color2 = color2, color1
+
+		color_pair = (color1, color2)
+		if color_pair in processed_pairs:
+			continue
+		processed_pairs.add(color_pair)
+
+		# traverse the two-color region starting from this component
+		region_size = dfs_two_color(
+			comp_id, color1, color2, id_to_color, id_to_size, component_adj
+		)
+		res2 = max(res2, region_size)
+
+# write output
+with open("multimoo.out", "w") as f:
+	f.write(f"{res1}\n")
+	f.write(f"{res2}\n")
+```
+
+</PySection>
+</LanguageSection>
