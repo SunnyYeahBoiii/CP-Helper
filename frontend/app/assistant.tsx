@@ -2,10 +2,9 @@
 
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import {
-  useLocalRuntime,
-  ChatModelAdapter,
-  type ThreadMessage,
-} from "@assistant-ui/react";
+  useChatRuntime,
+  AssistantChatTransport,
+} from "@assistant-ui/react-ai-sdk";
 import { Thread } from "@/components/assistant-ui/thread";
 import {
   SidebarInset,
@@ -22,65 +21,10 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-
-// Custom adapter for streaming API calls
-const CustomModelAdapter: ChatModelAdapter = {
-  async *run({ messages, abortSignal }) {
-    const response = await fetch("/api/chat", {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        question: messages[messages.length - 1].content
-      }),
-      signal: abortSignal,
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const reader = response.body?.getReader();
-    const decoder = new TextDecoder();
-    let text = "";
-
-    if (reader) {
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\n');
-          
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                if (data.content) {
-                  text += data.content;
-                  yield {
-                    content: [{ type: "text", text }],
-                  };
-                } else if (data.error) {
-                  throw new Error(data.error);
-                }
-              } catch (e) {
-                // Ignore JSON parsing errors for partial chunks
-              }
-            }
-          }
-        }
-      } finally {
-        reader.releaseLock();
-      }
-    }
-  },
-};
+import { useMyCustomRuntime } from "@/hooks/adapter";
 
 export const Assistant = () => {
-  const runtime = useLocalRuntime(CustomModelAdapter);
+  const runtime = useMyCustomRuntime();
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>

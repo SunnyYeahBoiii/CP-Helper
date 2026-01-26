@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import ollama
 import json
+import httpx
+import asyncio
 
 
 
@@ -17,10 +19,10 @@ import json
 
 app = FastAPI()
 
-# Add CORS middleware to handle OPTIONS requests
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],  # Next.js dev server
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "https://66689be24842.ngrok-free.app"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
@@ -31,25 +33,70 @@ class QueryRequest(BaseModel):
     question: str
 
 # --- 3. ĐỊNH NGHĨA API ENDPOINT ---
+@app.options("/api/chat")
+async def chat_options():
+    return {"status": "ok"}
+
 @app.post("/api/chat")
 async def chat_endpoint(request: QueryRequest):
     """
-    API nhận câu hỏi -> Chạy RAG -> Trả về câu trả lời streaming
+    API nhận câu hỏi -> Chạy RAG -> Gửi đến reasoning API -> Trả về câu trả lời streaming
     """
-    print(request.question)
+    print("QUESTION " , request.question)
     
     async def generate_stream():
         try:
-            # Get the response generator from query function
-            response_generator = query(request.question, stream=True)
+            # 1. Get RAG context (non-streaming for now)
+            rag_response_generator = query(request.question, stream=False)
+            rag_response = ""
+            chunk_count = 0
+            for chunk in rag_response_generator:
+                rag_response += chunk
+                chunk_count += 1
             
-            for chunk in response_generator:
-                # Yield each chunk as JSON in Server-Sent Events format
-                yield f"data: {json.dumps({'content': chunk})}\n\n"
-                
+            print(f"RAG Response received: {chunk_count} chunks, total length: {len(rag_response)}")
+            print(f"RAG Response content: {rag_response[:200]}..." if len(rag_response) > 200 else f"RAG Response content: {rag_response}")
+
+            # 2. The rag_response is now the full prompt ready to send to LLM
+            reasoning_payload = {
+                "model": "llama3:latest",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": rag_response
+                    }
+                ]
+            }
+            
+            # 3. Send to reasoning API and stream the response
+            async with httpx.AsyncClient() as client:
+                async with client.stream(
+                    "POST", 
+                    "https://1f2344524333.ngrok-free.app/api/chat",
+                    json=reasoning_payload,
+                    timeout=60.0
+                ) as response:
+                    response.raise_for_status()
+                    
+                    async for chunk in response.aiter_text():
+                        # Process each JSON line from the streaming response
+                        for line in chunk.split('\n'):
+                            line = line.strip()
+                            if line:
+                                try:
+                                    parsed = json.loads(line)
+                                    if parsed.get("message", {}).get("content"):
+                                        content = parsed["message"]["content"]
+                                        if content:  # Only yield non-empty content
+                                            print(f"Yielding content: {content}")
+                                            yield f"{json.dumps({'message': {'role': 'assistant', 'content': content}})}\n"
+                                except json.JSONDecodeError:
+                                    # Skip invalid JSON lines
+                                    continue
+                                    
         except Exception as e:
             # Send error message as JSON
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            yield f"{json.dumps({'error': str(e)})}\n"
     
     return StreamingResponse(
         generate_stream(),
