@@ -1,21 +1,29 @@
-import { openai } from "@ai-sdk/openai";
-import { streamText, convertToModelMessages, type UIMessage } from "ai";
-
 export async function POST(req: Request) {
-  const { messages }: { messages: UIMessage[] } = await req.json();
+  const body = await req.json();
 
-  const result = streamText({
-    model: openai.responses("gpt-5-nano"),
-    messages: convertToModelMessages(messages),
-    providerOptions: {
-      openai: {
-        reasoningEffort: "low",
-        reasoningSummary: "auto",
-      },
+  // Proxy to Python RAG backend
+  const ragApiUrl = process.env.RAG_API_URL ?? "http://localhost:8000";
+
+  const response = await fetch(`${ragApiUrl}/api/chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
     },
+    body: JSON.stringify(body),
   });
 
-  return result.toUIMessageStreamResponse({
-    sendReasoning: true,
+  if (!response.ok) {
+    return new Response(`RAG API Error: ${response.statusText}`, {
+      status: response.status,
+    });
+  }
+
+  // Stream the response back to the client
+  return new Response(response.body, {
+    headers: {
+      "Content-Type": "text/plain",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+    },
   });
 }

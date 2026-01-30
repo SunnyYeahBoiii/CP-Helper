@@ -9,6 +9,9 @@ import {
   useIsMarkdownCodeBlock,
 } from "@assistant-ui/react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import { type FC, memo, useState } from "react";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
@@ -18,8 +21,9 @@ import { cn } from "@/lib/utils";
 const MarkdownTextImpl = () => {
   return (
     <MarkdownTextPrimitive
-      remarkPlugins={[remarkGfm]}
-      className="aui-md"
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[rehypeKatex]}
+      className="aui-md shadow-none!"
       components={defaultComponents}
     />
   );
@@ -217,7 +221,7 @@ const defaultComponents = memoizeMarkdownComponents({
       <code
         className={cn(
           !isCodeBlock &&
-            "aui-md-inline-code rounded border bg-muted font-semibold",
+          "aui-md-inline-code rounded border bg-muted font-semibold",
           className,
         )}
         {...props}

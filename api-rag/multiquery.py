@@ -10,6 +10,9 @@ from unstructured.partition.md import partition_md
 
 load_dotenv()
 
+# Configuration from environment variables
+LLM_API_URL = os.getenv("LLM_API_URL", "http://localhost:11434/api/chat")
+
 def process_mdx_advanced(file_path):
     # partition_md tự động xử lý frontmatter và cấu trúc markdown
     elements = partition_md(filename=file_path)
@@ -42,23 +45,24 @@ vector_store = PineconeVectorStore(
 
 retriever = vector_store.as_retriever(kwargs={"k": 5})
 
-template="""You are an AI language model assistant. Your task is to generate five 
+template="""You are an AI language model assistant. Your task is to generate five
 different versions of the given user question to retrieve relevant documents from a vector 
 database. By generating multiple perspectives on the user question, your goal is to help
 the user overcome some of the limitations of the distance-based similarity search. 
-Provide these alternative questions separated by newlines. Original question: {question}"""
+Provide these alternative questions separated by newlines. Remember to return the 
+question in the original question's language. Original question: {question}"""
 prompt_perspectives = ChatPromptTemplate.from_template(template)
 def generate_queries_alternative(question: str):
     """Generate multiple query perspectives using remote API"""
     import httpx
     import json
     
-    template = """Generate exactly 5 different versions of this question for better document retrieval.
-Return ONLY the questions, one per line. No explanations, no numbers, no conversational text.
-
-Original question: {question}
-
-Alternative questions:"""
+    template = """You are an AI language model assistant. Your task is to generate five
+different versions of the given user question to retrieve relevant documents from a vector 
+database. By generating multiple perspectives on the user question, your goal is to help
+the user overcome some of the limitations of the distance-based similarity search. 
+Provide these alternative questions separated by newlines. Remember to return the 
+question in the original question's language. Original question: {question}"""
     
     full_prompt = template.format(question=question)
     
@@ -77,7 +81,7 @@ Alternative questions:"""
     try:
         with httpx.Client() as client:
             response = client.post(
-                "https://1f2344524333.ngrok-free.app/api/chat",
+                LLM_API_URL,
                 json=payload,
                 timeout=30.0
             )
@@ -202,18 +206,26 @@ def query(question: str, stream: bool = False):
     print(f"Built context length: {len(context)}")
     
     full_prompt = f'''
-    You are a extremely helpful assistant in Competitive Programming. 
-    Use the info in the context to answer the question as much detailed as possible. 
-    If the question have no relation to the context provided, just answer like usual.
-    If there are any code, implement it fully and dont hide any line.
+    You are an extremely helpful assistant specializing in Competitive Programming. 
+    Use the provided context to answer the user's question with as much detail as possible.
 
-    If you cannot answer, just say "I don't know"
+    ### Instructions:
+    - If the question is unrelated to the context, answer using your general knowledge.
+    - If code is required, implement it fully without hiding any lines.
+    - **IMPORTANT: Use LaTeX for all mathematical formulas.** 
+        - Use single dollar signs `$ ... $` for inline math.
+        - Use double dollar signs `$$ ... $$` for block math or complex equations.
+    - If you cannot answer based on the context or your knowledge, simply say "I don't know".
+    - **Answer the question in the same language as the question.**
 
-    Context:
+    ### Context:
     {context}
 
-    Question:
+    ### Question:
     {question}
+
+    ### FINAL REMINDER:
+    Always use LaTeX formatting with $ or $$ for ALL mathematical expressions, variables (like $n, O(n \\log n)$), and formulas even simple or complicated ones.
     '''
 
     print(f"Generated prompt length: {len(full_prompt)}")

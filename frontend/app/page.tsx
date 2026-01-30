@@ -1,5 +1,5 @@
-import { Assistant } from "./assistant";
+import LandingPage from "@/components/LandingPage";
 
 export default function Home() {
-  return <Assistant />;
+  return <LandingPage />;
 }

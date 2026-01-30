@@ -9,6 +9,14 @@ import ollama
 import json
 import httpx
 import asyncio
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Configuration from environment variables
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+LLM_API_URL = os.getenv("LLM_API_URL", "http://localhost:11434/api/chat")
 
 
 
@@ -22,10 +30,10 @@ app = FastAPI()
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "https://66689be24842.ngrok-free.app"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 # Định nghĩa cấu trúc dữ liệu đầu vào
@@ -72,7 +80,7 @@ async def chat_endpoint(request: QueryRequest):
             async with httpx.AsyncClient() as client:
                 async with client.stream(
                     "POST", 
-                    "https://1f2344524333.ngrok-free.app/api/chat",
+                    LLM_API_URL,
                     json=reasoning_payload,
                     timeout=60.0
                 ) as response:

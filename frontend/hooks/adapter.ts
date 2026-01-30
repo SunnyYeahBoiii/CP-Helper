@@ -1,5 +1,5 @@
-import { 
-  useLocalRuntime, 
+import {
+  useLocalRuntime,
   type ChatModelAdapter,
 } from "@assistant-ui/react";
 
@@ -12,7 +12,9 @@ const MyCustomAdapter: ChatModelAdapter = {
       question: lastMessage.content[0]?.type === 'text' ? lastMessage.content[0].text : '',
     };
 
-    const response = await fetch("http://localhost:8000/api/chat", {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
+
+    const response = await fetch(`${apiUrl}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -30,7 +32,7 @@ const MyCustomAdapter: ChatModelAdapter = {
     // If streaming, read the body chunks.
     const reader = response.body?.getReader();
     const decoder = new TextDecoder();
-    
+
     if (!reader) return;
 
     let textSoFar = "";
@@ -43,7 +45,7 @@ const MyCustomAdapter: ChatModelAdapter = {
       console.log('Received chunk:', chunk);
       const lines = chunk.split('\n').filter(line => line.trim());
       console.log('Parsed lines:', lines);
-      
+
       for (const line of lines) {
         try {
           const parsed = JSON.parse(line);
